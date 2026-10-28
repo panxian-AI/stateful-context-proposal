@@ -1,0 +1,14 @@
+{
+  "meta": {
+    "turns": 296,
+    "seed": 1,
+    "version": "StateDial-Omega-0.1"
+  },
+  "model": "local-model",
+  "n_1hop": 45,
+  "n_2hop": 43,
+  "acc_1hop": 0.8667,
+  "acc_2hop": 1.0,
+  "synergy_ratio": 1.154,
+  "verdict": "PASS"
+}
