@@ -62,6 +62,7 @@ def build(args) -> List[dict]:
     turns: List[dict] = []
     tick = 0
     alive_history = []
+    slot_latest: Dict[str, str] = {}   # slot -> 当前有效 fid，供「写入污染」评测
 
     for _ in range(args.turns):
         tick += 1
@@ -72,6 +73,7 @@ def build(args) -> List[dict]:
         if r < 0.42 or n_alive < 3:
             f = make_fact(tick, facts if n_alive else None)
             facts[f["fid"]] = f
+            slot_latest[f["slot"]] = f["fid"]
             turns.append(dict(action="set", tick=tick, fact_id=f["fid"],
                              slot=f["slot"], value=f["value"],
                              depends_on=f["depends_on"], expected="ok",
@@ -81,8 +83,11 @@ def build(args) -> List[dict]:
         elif r < 0.6 and n_alive:
             victim = rng.choice([f for f in facts.values() if f["dead"] is None])
             victim["dead"] = tick
+            if slot_latest.get(victim["slot"]) == victim["fid"]:
+                slot_latest.pop(victim["slot"], None)
             turns.append(dict(action="revoke", tick=tick, fact_id=victim["fid"],
-                             expected="revoked", reason="revoke",
+                             slot=victim["slot"],
+                             expected=dict(kind="null"), reason="revoke",
                              n_facts_alive=n_alive - 1))
 
         # --- 3. 覆盖冲突 ---
@@ -94,9 +99,12 @@ def build(args) -> List[dict]:
             f["slot"] = old["slot"]            # 同 slot，不同 fid
             f["value"] = new_val
             facts[f["fid"]] = f
+            slot_latest[f["slot"]] = f["fid"]
             turns.append(dict(action="conflict", tick=tick,
                              revoked=old["fid"], fact_id=f["fid"],
-                             slot=f["slot"], value=new_val, expected="updated",
+                             slot=f["slot"], value=new_val,
+                             expected=dict(kind="value", value=new_val,
+                                           stale_fid=old["fid"]),
                              reason="slot overwrite", n_facts_alive=n_alive))
 
         # --- 4. 单跳查询 ---
@@ -131,6 +139,7 @@ def build(args) -> List[dict]:
             turns.append(dict(action="query_2hop", tick=tick, fact_id=f["fid"],
                              query=f"基于 {f['slot']}（id={f['fid']}）及其依赖项，最终值是多少？",
                              expected=exp, reason="2-hop chain / dead-branch",
+                             chain=exp.get("chain", []),
                              n_facts_alive=n_alive))
 
         if tick % 50 == 0:
